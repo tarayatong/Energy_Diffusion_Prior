@@ -46,9 +46,6 @@ class Trainer(object):
         if args.mode == 'TXT':
             dataset_dir = args.root + '/' + args.dataset
             train_img_ids, val_img_ids, test_img_ids = load_dataset(args.root, args.dataset, args.split_method)
-        if args.mode == 'SIATD10seq':
-            dataset_dir = args.root + '/' + args.dataset
-            train_img_ids, val_img_ids, test_img_ids = load_dataset_5folders(args.root, args.dataset, args.split_method)
 
         # Preprocess and load data
         input_transform = transforms.Compose([
@@ -111,26 +108,16 @@ class Trainer(object):
             # edge = edge.cuda()
             torch.cuda.synchronize()
             start = time.time()
-            if args.deep_supervision == 'True':
-                preds = self.model(data)
-                loss = 0
-                edge_loss = 0
-                for pred in preds[:4]:
-                    if self.lossfunc in [edge_wsoftmiou_loss, wsoftmiou_loss, dual_loss]:
-                        loss += self.lossfunc(pred, labels, data)
-                    else:
-                        loss += self.lossfunc(pred, labels)
-                loss /= 4
-                for pred_edge in preds[4:]:
-                    edge_loss_i = BCEDiceLoss(pred_edge, labels)
-                    edge_loss += edge_loss_i
-                loss+=(edge_loss)
-            else:
-                pred = self.model(data)
-                if self.lossfunc in [wsoftmiou_loss, dual_loss]:
-                    loss = self.lossfunc(pred, labels, data)
-                else:
-                    loss = self.lossfunc(pred, labels)
+            preds = self.model(data)
+            loss = 0
+            edge_loss = 0
+            for pred in preds[:4]:
+                loss += self.lossfunc(pred, labels, data)
+            loss /= 4
+            for pred_edge in preds[4:]:
+                edge_loss_i = BCEDiceLoss(pred_edge, labels)
+                edge_loss += edge_loss_i
+            loss+=(edge_loss)
             loss.backward() # 损失回传
             self.optimizer.step()   # 优化迭代
             self.optimizer.zero_grad()  # 优化器初始化
@@ -158,22 +145,15 @@ class Trainer(object):
                 edge = edge.cuda()
                 torch.cuda.synchronize()
                 start = time.time()
-                if args.deep_supervision == 'True':
-                    preds = self.model(data)
-                    loss = 0
-                    for pred in preds[:4]:
-                        if self.lossfunc in [edge_wsoftmiou_loss, wsoftmiou_loss, dual_loss]:
-                            loss += self.lossfunc(pred, labels, data)
-                        else:
-                            loss += self.lossfunc(pred, labels)
-                    loss /= 4
-                    pred =preds[3] # 最终结果是最后的输出图
-                else:
-                    pred = self.model(data)
-                    if self.lossfunc in [wsoftmiou_loss, dual_loss]:
-                        loss = self.lossfunc(pred, labels, data)
-                    else:
-                        loss = self.lossfunc(pred, labels)
+                preds = self.model(data)
+                loss = 0
+                for pred in preds[:4]:
+                    loss += self.lossfunc(pred, labels, data)
+                loss /= 4
+                for pred_edge in preds[4:]:
+                    edge_loss += BCEDiceLoss(pred_edge, labels)
+                loss+=(edge_loss)
+                pred =preds[3] # 最终结果是最后的输出图
                 torch.cuda.synchronize()
                 end = time.time()
                 infer_time = end-start
